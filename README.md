@@ -1,6 +1,3 @@
-# DSA_in_ABAP
-This repository contains Data Structures and Algorithms (DSA) implemented using SAP ABAP programming language. It includes solutions for common algorithmic problems, useful for learning, interview preparation, and practical ABAP coding challenges.
-
 # DSA-in-ABAP
 
 This repository contains implementations of common Data Structures and Algorithms (DSA) using SAP ABAP programming language. The goal is to provide easy-to-understand examples and solutions for learning, interview preparation, and practical coding in ABAP.
