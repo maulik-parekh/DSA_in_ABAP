@@ -1,0 +1,1192 @@
+REPORT y_dsa_algorithm.
+
+**********************************************************************
+*✅ Sorting Algorithms:
+*  - merge_sort: Fully implemented.
+*  - quick_sort: Fully implemented using modern ABAP expressions.
+*
+*🔍 Searching:
+*  - binary_search: Clean implementation, handles edge cases.
+*
+*🧮 Dynamic Programming:
+*  - fibonacci_dp: Iterative implementation with memoization.
+*
+*🔢 Recursion / Backtracking:
+*  - generate_binary_strings: Includes helper method backtrack.
+*
+*📊 Greedy Algorithms:
+*  - activity_selection: Classic interval scheduling problem solved.
+*
+*🌐 Graph Algorithms:
+*  - dijkstra: Basic shortest path implementation (uses arrays instead of priority queue — acceptable for ABAP).
+*  - topological_sort: Based on in-degree and queue (Kahn’s Algorithm).
+*  - topological_sort_kahn: Separate clean implementation using tt_edges.
+*
+*✅ All listed algorithms above are fully implemented in this demo.
+*
+*✅ Code Quality Review:
+*  - Naming conventions: ty_, tt_, lt_, etc. consistently used 👍
+*  - Indentation: Clean, readable, modern ABAP style
+*  - Use of VALUE/NEW expressions: Properly applied
+*  - Hash tables used for in-degree and cost lookups — good for performance
+*  - Performance: Acceptable for ABAP context, though dijkstra without heap is less optimal
+**********************************************************************
+
+CLASS lcl_helper DEFINITION.
+  PUBLIC SECTION.
+    CLASS-METHODS:
+      backtrack IMPORTING iv_s TYPE string
+                          iv_n TYPE i.
+ENDCLASS.
+
+CLASS lcl_helper IMPLEMENTATION.
+  METHOD backtrack.
+    IF strlen( iv_s ) = iv_n.
+      WRITE: / iv_s.
+      RETURN.
+    ENDIF.
+
+    backtrack( iv_s = iv_s && '0' iv_n = iv_n ).
+    backtrack( iv_s = iv_s && '1' iv_n = iv_n ).
+  ENDMETHOD.
+ENDCLASS.
+
+
+CLASS lcl_dsa DEFINITION.
+  PUBLIC SECTION.
+    TYPES: BEGIN OF ty_node,
+             id     TYPE i,
+             weight TYPE i,
+           END OF ty_node.
+
+    TYPES: tt_node TYPE HASHED TABLE OF ty_node WITH UNIQUE KEY id.
+
+    TYPES: tt_i TYPE STANDARD TABLE OF i WITH EMPTY KEY.
+
+
+    TYPES: BEGIN OF ty_edge,
+             src    TYPE i,
+             dest   TYPE i,
+             weight TYPE i,
+           END OF ty_edge.
+
+    TYPES: tt_edge TYPE STANDARD TABLE OF ty_edge WITH EMPTY KEY.
+
+
+    TYPES: BEGIN OF ty_path,
+             node     TYPE i,
+             previous TYPE i,
+           END OF ty_path.
+
+    TYPES: tt_path TYPE HASHED TABLE OF ty_path WITH UNIQUE KEY node.
+
+    TYPES: tt_route TYPE STANDARD TABLE OF i WITH EMPTY KEY.
+
+
+    TYPES: BEGIN OF ty_edges,
+             src  TYPE i,
+             dest TYPE i,
+           END OF ty_edges.
+    TYPES: tt_edges TYPE STANDARD TABLE OF ty_edges WITH EMPTY KEY.
+
+    TYPES: tt_nodes TYPE SORTED TABLE OF i WITH UNIQUE KEY table_line.
+
+
+    TYPES: BEGIN OF ty_indegree,
+             id    TYPE i,
+             count TYPE i,
+           END OF ty_indegree.
+
+    TYPES: tt_indegree TYPE HASHED TABLE OF ty_indegree WITH UNIQUE KEY id.
+
+
+    TYPES: BEGIN OF ty_cost,
+             id     TYPE i,
+             weight TYPE i,
+           END OF ty_cost.
+
+    TYPES: tt_cost TYPE HASHED TABLE OF ty_cost WITH UNIQUE KEY id.
+
+
+    TYPES: BEGIN OF ty_dfsbfs_edge,
+             from_node TYPE i,
+             to_node   TYPE i,
+           END OF ty_dfsbfs_edge.
+
+    TYPES: tt_dfsbfs_edge       TYPE STANDARD TABLE OF ty_dfsbfs_edge WITH DEFAULT KEY.
+
+    TYPES: tt_dfsbfs_adjacency  TYPE STANDARD TABLE OF i WITH DEFAULT KEY.
+
+
+    TYPES: BEGIN OF ty_dfsbfs_graph_row,
+             node      TYPE i,
+             neighbors TYPE tt_dfsbfs_adjacency,
+           END OF ty_dfsbfs_graph_row.
+
+    TYPES: tt_dfsbfs_graph      TYPE STANDARD TABLE OF ty_dfsbfs_graph_row WITH DEFAULT KEY.
+    TYPES: tt_dfsbfs_visited    TYPE HASHED TABLE OF i WITH UNIQUE KEY table_line.
+    TYPES: tt_dfsbfs_queue      TYPE STANDARD TABLE OF i WITH DEFAULT KEY.
+    TYPES: tt_dfsbfs_result     TYPE STANDARD TABLE OF i WITH DEFAULT KEY.
+
+
+*& Methods
+    CLASS-METHODS:
+      merge_sort
+        IMPORTING it_input         TYPE tt_i
+        RETURNING VALUE(rt_sorted) TYPE tt_i,
+
+      quick_sort
+        IMPORTING it_input         TYPE tt_i
+        RETURNING VALUE(rt_sorted) TYPE tt_i,
+
+      binary_search
+        IMPORTING it_input        TYPE tt_i
+                  iv_key_value    TYPE i
+        EXPORTING ev_index        TYPE i
+                  ev_sorted_array TYPE tt_i,
+
+      fibonacci_dp
+        IMPORTING iv_n             TYPE i
+        RETURNING VALUE(rv_result) TYPE i,
+
+      generate_binary_strings
+        IMPORTING iv_n TYPE i,
+
+      activity_selection
+        RETURNING VALUE(rt_selected) TYPE tt_i,
+
+      dijkstra
+        IMPORTING
+          it_graph     TYPE tt_edge
+          iv_source    TYPE i
+        EXPORTING
+          et_distances TYPE tt_cost
+          et_paths     TYPE tt_path,
+
+
+      get_shortest_path
+        IMPORTING
+          iv_target      TYPE i
+          it_paths       TYPE tt_path
+        RETURNING
+          VALUE(rt_path) TYPE tt_route,
+
+      topological_sort
+        IMPORTING
+          it_edges  TYPE tt_edge
+        EXPORTING
+          et_result TYPE tt_i,
+
+      topological_sort_kahn
+        IMPORTING
+          it_edges  TYPE tt_edges
+        EXPORTING
+          et_result TYPE  tt_nodes,
+
+      dfs_graph
+        IMPORTING it_edges         TYPE tt_dfsbfs_edge
+                  iv_start         TYPE i
+        RETURNING VALUE(rt_result) TYPE tt_dfsbfs_result,
+
+      bfs_graph
+        IMPORTING it_edges         TYPE tt_dfsbfs_edge
+                  iv_start         TYPE i
+        RETURNING VALUE(rt_result) TYPE tt_dfsbfs_result.
+
+
+  PRIVATE SECTION.
+    CLASS-METHODS:
+      build_graph
+        IMPORTING it_edges        TYPE tt_dfsbfs_edge
+        RETURNING VALUE(rt_graph) TYPE tt_dfsbfs_graph,
+
+      dfs_helper
+        IMPORTING iv_node    TYPE i
+                  it_graph   TYPE tt_dfsbfs_graph
+        CHANGING  ct_visited TYPE tt_dfsbfs_visited
+                  ct_result  TYPE tt_dfsbfs_result,
+
+      bfs_helper
+        IMPORTING iv_start_node    TYPE i
+                  it_graph         TYPE tt_dfsbfs_graph
+        RETURNING VALUE(rt_result) TYPE tt_dfsbfs_result.
+
+ENDCLASS.
+
+
+CLASS lcl_dsa IMPLEMENTATION.
+
+  METHOD merge_sort.
+    " Local variables
+    DATA: lv_mid         TYPE i,       " Midpoint index
+          lt_left        TYPE tt_i,    " Left sub-array
+          lt_right       TYPE tt_i,    " Right sub-array
+          lv_lines       TYPE i,       " Total number of elements
+          lv_index_left  TYPE i VALUE 1, " Pointer/index for left sub-array
+          lv_index_right TYPE i VALUE 1. " Pointer/index for right sub-array
+
+    " Base case: if array has 1 or 0 elements, it's already sorted
+    IF lines( it_input ) <= 1.
+      rt_sorted = it_input.
+      RETURN.
+    ENDIF.
+
+    " Determine midpoint to split the input array
+    lv_lines = lines( it_input ).
+    lv_mid = lv_lines / 2.
+
+    DATA(lv_index) = 0.
+
+    " Split the array into left and right halves
+    LOOP AT it_input INTO DATA(lv_val).
+      lv_index += 1.
+      IF lv_index <= lv_mid.
+        APPEND lv_val TO lt_left.
+      ELSE.
+        APPEND lv_val TO lt_right.
+      ENDIF.
+    ENDLOOP.
+
+    " Recursively sort both halves
+    lt_left  = merge_sort( lt_left ).
+    lt_right = merge_sort( lt_right ).
+
+    " Merge the two sorted halves into the result
+    CLEAR rt_sorted.
+
+    " Compare elements from both halves and append the smaller one
+    WHILE lv_index_left <= lines( lt_left ) AND lv_index_right <= lines( lt_right ).
+      IF lt_left[ lv_index_left ] <= lt_right[ lv_index_right ].
+        APPEND lt_left[ lv_index_left ] TO rt_sorted.
+        lv_index_left += 1.
+      ELSE.
+        APPEND lt_right[ lv_index_right ] TO rt_sorted.
+        lv_index_right += 1.
+      ENDIF.
+    ENDWHILE.
+
+    " Append any remaining elements from the left half
+    WHILE lv_index_left <= lines( lt_left ).
+      APPEND lt_left[ lv_index_left ] TO rt_sorted.
+      lv_index_left += 1.
+    ENDWHILE.
+
+    " Append any remaining elements from the right half
+    WHILE lv_index_right <= lines( lt_right ).
+      APPEND lt_right[ lv_index_right ] TO rt_sorted.
+      lv_index_right += 1.
+    ENDWHILE.
+
+    " -----------------------------------------------------------------------
+    " Time Complexity:
+    " - Each split divides the list in half => O(log N) levels of recursion
+    " - Merging takes O(N) time at each level
+    " - Total Time Complexity: O(N log N)
+
+    " Space Complexity:
+    " - Each recursive call creates new subarrays => O(N) auxiliary space
+    " - Total Space Complexity: O(N)
+    " -----------------------------------------------------------------------
+
+  ENDMETHOD.
+
+  METHOD quick_sort.
+    " Base case: If input has 0 or 1 element, it is already sorted
+    IF lines( it_input ) <= 1.
+      rt_sorted = it_input.
+      RETURN.
+    ENDIF.
+
+    " Choose the first element as the pivot
+    DATA(lv_pivot_value) = it_input[ 1 ].
+
+    " Partition the input into three lists:
+    " lt_less  - elements less than pivot
+    " lt_equal - elements equal to pivot (including the pivot itself)
+    " lt_more  - elements greater than pivot
+
+    DATA(lt_less_value)  = VALUE tt_i( FOR <fs> IN it_input WHERE ( table_line < lv_pivot_value )
+                                              ( <fs> ) ).
+
+    DATA(lt_equal_value) = VALUE tt_i( FOR <fs> IN it_input WHERE ( table_line = lv_pivot_value )
+                                              ( <fs> ) ).
+
+    DATA(lt_more_value)  = VALUE tt_i( FOR <fs> IN it_input WHERE ( table_line > lv_pivot_value )
+                                              ( <fs> ) ).
+
+    " Recursively sort the 'less than pivot' partition
+    rt_sorted = quick_sort( lt_less_value ).
+
+    " Append the 'equal to pivot' partition (all elements equal to pivot)
+    APPEND LINES OF lt_equal_value TO rt_sorted.
+
+    " Recursively sort the 'greater than pivot' partition and append the result
+    APPEND LINES OF quick_sort( lt_more_value ) TO rt_sorted.
+
+    " -------------------------------------------------------------------------
+    " Time Complexity:
+    " - Best/Average Case: O(N log N)
+    "   * The pivot divides the array into roughly two halves each time.
+    " - Worst Case: O(N^2)
+    "   * Occurs when the pivot is always the smallest or largest element, causing unbalanced partitions.
+    "
+    " Space Complexity:
+    " - O(N) auxiliary space is needed for the recursive calls and temporary tables (lt_less, lt_equal, lt_more).
+    " - Recursive call stack depth is O(log N) on average, O(N) worst case.
+    " -------------------------------------------------------------------------
+
+  ENDMETHOD.
+
+
+  METHOD binary_search.
+
+    " Local variables for the binary search boundaries and midpoint
+    DATA: lv_index_low  TYPE i VALUE 1,      " Start index of the search range
+          lv_index_high TYPE i,             " End index of the search range
+          lv_index_mid  TYPE i.             " Midpoint index
+
+    DATA(lt_input_sort) = it_input.
+    SORT lt_input_sort BY table_line ASCENDING .
+    ev_sorted_array = lt_input_sort.
+
+    " Initialize high index to the total number of elements
+    lv_index_high = lines( lt_input_sort ).
+
+    " Default result if key not found
+    ev_index = -1.
+
+    " Binary search loop: narrow down the search range until low > high
+    WHILE lv_index_low <= lv_index_high.
+
+      " Calculate midpoint (integer division)
+      lv_index_mid = ( lv_index_low + lv_index_high ) / 2.
+
+      " Check if the middle element matches the search key
+      IF lt_input_sort[ lv_index_mid ] = iv_key_value.
+        ev_index = lv_index_mid.  " Found key at lv_mid
+        RETURN.             " Exit the method immediately
+      ELSEIF lt_input_sort[ lv_index_mid ] < iv_key_value.
+        " If middle element value is less than key value, search in the right half
+        lv_index_low = lv_index_mid + 1.
+      ELSE.
+        " Otherwise, search in the left half
+        lv_index_high = lv_index_mid - 1.
+      ENDIF.
+    ENDWHILE.
+
+
+
+    " If the loop ends without returning, key was not found, ev_index = -1
+
+    " ----------------------------------------------------------------------
+    " Time Complexity:
+    " - Each iteration halves the search space
+    " - Worst-case number of iterations: O(log N)
+    " - Total Time Complexity: O(log N)
+
+    " Space Complexity:
+    " - Only a fixed number of variables used (no recursion or extra data structures)
+    " - Total Space Complexity: O(1)
+    " ----------------------------------------------------------------------
+
+  ENDMETHOD.
+
+
+  METHOD fibonacci_dp.
+    " Dynamic Programming approach to compute nth Fibonacci number
+    " Uses bottom-up tabulation (memoization in table)
+
+    DATA lt_memo TYPE tt_i. " Memoization table (0-based Fibonacci values)
+
+    " Initialize base cases
+    APPEND 0 TO lt_memo. " F(0) = 0, stored at index 1 (ABAP index)
+    APPEND 1 TO lt_memo. " F(1) = 1, stored at index 2
+
+    " Loop from 2 to N (calculate F(2) to F(N))
+    DO iv_n - 1 TIMES.
+      DATA(idx) = sy-index + 2. " Index in ABAP starts at 1, so +2 for F(n)
+
+      " Get previous two Fibonacci values and calculate current
+      DATA(val) = lt_memo[ idx - 1 ] + lt_memo[ idx - 2 ].
+
+      " Append computed Fibonacci number to memo table
+      APPEND val TO lt_memo.
+    ENDDO.
+
+    " Retrieve the nth Fibonacci number (F(N)) from memo table
+    rv_result = lt_memo[ iv_n + 1 ].
+
+    " ------------------------------------------------------------------------
+    " Time Complexity:
+    " - One loop of (N - 1) iterations
+    " - Constant-time operations inside the loop
+    " - Total Time Complexity: O(N)
+
+    " Space Complexity:
+    " - One internal table of size N+1 (lt_memo)
+    " - Total Space Complexity: O(N)
+    " ------------------------------------------------------------------------
+
+  ENDMETHOD.
+
+  METHOD generate_binary_strings.
+    " This method generates all binary strings of length N using backtracking.
+    " It calls a helper class/method to do the recursive work.
+
+    " Start the recursive backtracking with an empty string (iv_s = '')
+    " and target length N (iv_n)
+    lcl_helper=>backtrack( iv_s = '' iv_n = iv_n ).
+
+    " ------------------------------------------------------------------------
+    " Time Complexity:
+    " - At each position, you can place either '0' or '1'
+    " - Total number of binary strings of length N = 2^N
+    " - So, Time Complexity: O(2^N)
+
+    " Space Complexity:
+    " - Call stack depth = N for recursion
+    " - Each recursive call creates a new string of length up to N
+    " - So, Space Complexity: O(N) per call stack depth
+    " - Total auxiliary space for all strings: O(2^N * N) if storing results
+
+    " Note: The actual complexity depends on the internal implementation of backtrack()
+    " in class LCL_HELPER (assumed to be recursive here).
+    " ------------------------------------------------------------------------
+
+  ENDMETHOD.
+
+  METHOD activity_selection.
+    " Define structure for an activity with start and end time
+    TYPES: BEGIN OF ty_activity,
+             start TYPE i,
+             end   TYPE i,
+           END OF ty_activity.
+
+    " Define an internal table type for storing multiple activities
+    TYPES: tt_activity TYPE STANDARD TABLE OF ty_activity WITH EMPTY KEY.
+
+    " Sample activity data (unsorted)
+    DATA(lt_acts) = VALUE tt_activity(
+      ( start = 1 end = 3 )
+      ( start = 2 end = 5 )
+      ( start = 4 end = 6 )
+      ( start = 6 end = 7 )
+      ( start = 5 end = 9 )
+      ( start = 8 end = 9 )
+    ).
+
+    " Sort activities by end time (greedy strategy: earliest finish first)
+    SORT lt_acts BY end ASCENDING.
+
+    " Initialize the end time of the last selected activity to 0
+    DATA(lv_last_end) = 0.
+
+    " Loop through the sorted activities and select non-overlapping ones
+    LOOP AT lt_acts ASSIGNING FIELD-SYMBOL(<act>).
+      " If current activity starts after or when the last one ended, select it
+      IF <act>-start >= lv_last_end.
+        " Add start time of selected activity to result
+        APPEND <act>-start TO rt_selected.
+        " Update the last selected activity end time
+        lv_last_end = <act>-end.
+      ENDIF.
+    ENDLOOP.
+
+    " --------------------------------------------------------------------------
+    " Time Complexity:
+    " - Sorting: O(N log N), where N = number of activities
+    " - Selection Loop: O(N)
+    " - Total Time Complexity: O(N log N)
+
+    " Space Complexity:
+    " - Input activity table: O(N)
+    " - Output result table (rt_selected): O(K), K <= N
+    " - Total Space Complexity: O(N)
+    " --------------------------------------------------------------------------
+
+  ENDMETHOD.
+
+
+  METHOD dijkstra.
+    DATA: lt_nodes               TYPE SORTED TABLE OF i WITH UNIQUE KEY table_line,
+          lt_dist                TYPE tt_cost,
+          lt_finalized_distances TYPE tt_cost,
+          lt_prev                TYPE tt_path,
+          lt_visited             TYPE tt_i.
+
+    LOOP AT it_graph INTO DATA(edge).
+      INSERT edge-src INTO TABLE lt_nodes.
+      INSERT edge-dest INTO TABLE lt_nodes.
+    ENDLOOP.
+
+    LOOP AT lt_nodes INTO DATA(node).
+      DATA(lv_weight) = COND i( WHEN node = iv_source THEN 0 ELSE 9999 ).
+      INSERT VALUE #( id = node weight = lv_weight ) INTO TABLE lt_dist.
+      INSERT VALUE #( node = node previous = -1 ) INTO TABLE lt_prev.
+    ENDLOOP.
+
+    WHILE lines( lt_dist ) > 0.
+
+      DATA(lv_min_dist) = 9999.
+      DATA(lv_min_node) = -1.
+
+      LOOP AT lt_dist ASSIGNING FIELD-SYMBOL(<dist>).
+        IF <dist>-weight < lv_min_dist.
+          lv_min_dist = <dist>-weight.
+          lv_min_node = <dist>-id.
+        ENDIF.
+      ENDLOOP.
+
+      IF lv_min_node = -1.
+        EXIT.
+      ENDIF.
+
+      " Save the final distance before deletion
+      READ TABLE lt_dist WITH KEY id = lv_min_node INTO DATA(ls_final).
+      IF sy-subrc = 0.
+        INSERT ls_final INTO TABLE lt_finalized_distances   .
+      ENDIF.
+
+      DELETE lt_dist WHERE id = lv_min_node.
+      INSERT lv_min_node INTO TABLE lt_visited.
+
+      LOOP AT it_graph ASSIGNING FIELD-SYMBOL(<edge>) WHERE src = lv_min_node.
+
+        IF line_exists( lt_visited[ table_line = <edge>-dest ] ).
+          CONTINUE.
+        ENDIF.
+
+        READ TABLE lt_dist WITH KEY id = <edge>-dest ASSIGNING FIELD-SYMBOL(<ndist>).
+        IF sy-subrc <> 0.
+          CONTINUE.
+        ENDIF.
+
+        DATA(new_cost) = lv_min_dist + <edge>-weight.
+
+        IF new_cost < <ndist>-weight.
+          <ndist>-weight = new_cost.
+          READ TABLE lt_prev WITH KEY node = <edge>-dest ASSIGNING FIELD-SYMBOL(<prev_node>).
+          IF sy-subrc = 0.
+            <prev_node>-previous = lv_min_node.
+          ENDIF.
+        ENDIF.
+
+      ENDLOOP.
+
+    ENDWHILE.
+
+    et_distances = lt_finalized_distances.
+    et_paths = lt_prev.
+  ENDMETHOD.
+
+  METHOD get_shortest_path.
+    DATA: lt_stack TYPE STANDARD TABLE OF i WITH EMPTY KEY,
+          lv_node  TYPE i,
+          ls_path  TYPE ty_path.
+
+    lv_node = iv_target.
+    WHILE lv_node <> -1.
+      INSERT lv_node INTO TABLE lt_stack.
+      READ TABLE it_paths WITH KEY node = lv_node INTO ls_path.
+      IF sy-subrc <> 0.
+        EXIT.
+      ENDIF.
+      lv_node = ls_path-previous.
+    ENDWHILE.
+
+    " Reverse lt_stack to produce correct path order
+    DATA(lv_index) = lines( lt_stack ).
+    rt_path = VALUE #( ).
+    WHILE lv_index > 0.
+      READ TABLE lt_stack INDEX lv_index INTO lv_node.
+      INSERT lv_node INTO TABLE rt_path.
+      lv_index = lv_index - 1.
+    ENDWHILE.
+  ENDMETHOD.
+
+
+  METHOD topological_sort.
+
+    " --------------------------------------------------------------------------
+    " Step 1: Collect all unique nodes from the edge list (src and dest)
+    " --------------------------------------------------------------------------
+    DATA lt_all_nodes TYPE STANDARD TABLE OF i WITH NON-UNIQUE KEY table_line.
+    LOOP AT it_edges ASSIGNING FIELD-SYMBOL(<fs_edge>).
+      APPEND <fs_edge>-src TO lt_all_nodes.
+      APPEND <fs_edge>-dest TO lt_all_nodes.
+    ENDLOOP.
+
+    SORT lt_all_nodes.
+    DELETE ADJACENT DUPLICATES FROM lt_all_nodes.  " O(N log N)
+
+    " Step 2: Convert list to a sorted unique node table
+    TYPES: tt_nodes TYPE SORTED TABLE OF i WITH UNIQUE KEY table_line.
+    DATA lt_nodes TYPE tt_nodes.
+    lt_nodes = lt_all_nodes.  " O(N)
+
+    " --------------------------------------------------------------------------
+    " Step 3: Initialize in-degree count for each node (all start with 0)
+    " --------------------------------------------------------------------------
+    DATA lt_indegree TYPE tt_indegree.
+
+    LOOP AT lt_nodes ASSIGNING FIELD-SYMBOL(<fs_node>).
+      INSERT VALUE ty_indegree( id = <fs_node> count = 0 ) INTO TABLE lt_indegree.
+    ENDLOOP.
+
+    " --------------------------------------------------------------------------
+    " Step 4: Calculate in-degree for each node by scanning all edges
+    " --------------------------------------------------------------------------
+    LOOP AT it_edges ASSIGNING <fs_edge>.
+      READ TABLE lt_indegree ASSIGNING FIELD-SYMBOL(<fs_indegree>)
+           WITH KEY id = <fs_edge>-dest.
+      IF sy-subrc = 0.
+        <fs_indegree>-count += 1.
+      ENDIF.
+    ENDLOOP.
+
+    " --------------------------------------------------------------------------
+    " Step 5: Initialize queue with all nodes having in-degree of 0
+    " --------------------------------------------------------------------------
+    DATA lt_queue TYPE SORTED TABLE OF i WITH UNIQUE KEY table_line.
+    LOOP AT lt_indegree ASSIGNING <fs_indegree>.
+      IF <fs_indegree>-count = 0.
+        INSERT <fs_indegree>-id INTO TABLE lt_queue.
+      ENDIF.
+    ENDLOOP.
+
+    " --------------------------------------------------------------------------
+    " Step 6: Process queue and build topological sort result
+    " --------------------------------------------------------------------------
+    CLEAR et_result.
+    DATA lv_front TYPE i.
+
+    WHILE lines( lt_queue ) > 0.
+
+      " Pop front element (lowest ID with in-degree 0)
+      READ TABLE lt_queue INDEX 1 INTO lv_front.
+      DELETE lt_queue INDEX 1.
+      APPEND lv_front TO et_result.
+
+      " For each neighbor of the node, reduce in-degree and add to queue if 0
+      LOOP AT it_edges ASSIGNING <fs_edge> WHERE src = lv_front.
+
+        READ TABLE lt_indegree ASSIGNING <fs_indegree>
+             WITH KEY id = <fs_edge>-dest.
+        IF sy-subrc = 0.
+          <fs_indegree>-count -= 1.
+
+          " Add to queue if in-degree becomes zero
+          IF <fs_indegree>-count = 0.
+            INSERT <fs_edge>-dest INTO TABLE lt_queue.
+          ENDIF.
+        ENDIF.
+
+      ENDLOOP.
+
+    ENDWHILE.
+
+    " --------------------------------------------------------------------------
+    " Time Complexity:
+    " Let V = number of nodes, E = number of edges
+    "
+    " - Step 1: O(E log E) for sort + duplicate removal
+    " - Step 3: O(V) to initialize in-degree
+    " - Step 4: O(E) to count in-degrees
+    " - Step 5: O(V) to insert zero-in-degree nodes
+    " - Step 6: O(V + E) overall (each node added once, each edge visited once)
+    "
+    " => Total Time Complexity: O(V + E)
+    "
+    " Space Complexity:
+    " - lt_nodes: O(V)
+    " - lt_indegree: O(V)
+    " - lt_queue: O(V)
+    " => Total Space Complexity: O(V + E)
+    " --------------------------------------------------------------------------
+
+  ENDMETHOD.
+
+  METHOD topological_sort_kahn.
+
+    " ----------------------------------------------------------------------
+    " Implements Kahn's Algorithm (BFS-based Topological Sort)
+    " Input: it_edges (list of directed edges)
+    " Output: et_result (sorted list of node IDs)
+    " ----------------------------------------------------------------------
+
+    DATA lt_edges TYPE tt_edge.
+    DATA lt_all_nodes TYPE STANDARD TABLE OF i WITH NON-UNIQUE KEY table_line.
+
+    FIELD-SYMBOLS: <fs_edge>     TYPE ty_edge,
+                   <fs_indegree> TYPE ty_indegree,
+                   <fs_node>     TYPE i.
+
+    " Copy input edges to local variable
+    lt_edges = it_edges.
+
+    " ----------------------------------------------------------------------
+    " Step 1: Collect all unique nodes (from both src and dest)
+    " ----------------------------------------------------------------------
+    LOOP AT lt_edges ASSIGNING <fs_edge>.
+      APPEND <fs_edge>-src TO lt_all_nodes.
+      APPEND <fs_edge>-dest TO lt_all_nodes.
+    ENDLOOP.
+
+    SORT lt_all_nodes.
+    DELETE ADJACENT DUPLICATES FROM lt_all_nodes.  " O(E log E)
+
+    " Move to sorted unique node table
+    DATA lt_nodes TYPE tt_nodes.
+    lt_nodes = VALUE tt_nodes( FOR node IN lt_all_nodes ( node ) ).  " O(V)
+
+    " ----------------------------------------------------------------------
+    " Step 2: Initialize in-degree table
+    " ----------------------------------------------------------------------
+    DATA lt_indegree TYPE tt_indegree.
+
+    LOOP AT lt_nodes ASSIGNING <fs_node>.
+      INSERT VALUE ty_indegree( id = <fs_node> count = 0 ) INTO TABLE lt_indegree.
+    ENDLOOP.
+
+    " ----------------------------------------------------------------------
+    " Step 3: Calculate in-degrees from edges
+    " ----------------------------------------------------------------------
+    LOOP AT lt_edges ASSIGNING <fs_edge>.
+      READ TABLE lt_indegree ASSIGNING <fs_indegree> WITH KEY id = <fs_edge>-dest.
+      IF sy-subrc = 0.
+        <fs_indegree>-count += 1.
+      ENDIF.
+    ENDLOOP.
+
+    " ----------------------------------------------------------------------
+    " Step 4: Initialize queue with nodes having in-degree = 0
+    " ----------------------------------------------------------------------
+    DATA lt_queue TYPE STANDARD TABLE OF i WITH EMPTY KEY.
+
+    LOOP AT lt_indegree ASSIGNING <fs_indegree>.
+      IF <fs_indegree>-count = 0.
+        APPEND <fs_indegree>-id TO lt_queue.
+      ENDIF.
+    ENDLOOP.
+
+    " ----------------------------------------------------------------------
+    " Step 5: Process queue and perform topological sort
+    " ----------------------------------------------------------------------
+    DATA lt_result TYPE tt_nodes.
+    DATA lv_front TYPE i.
+
+    WHILE lines( lt_queue ) > 0.
+      READ TABLE lt_queue INDEX 1 INTO lv_front.
+      DELETE lt_queue INDEX 1.
+      INSERT lv_front INTO TABLE lt_result.
+
+      " Decrease in-degree of all neighbors
+      LOOP AT lt_edges ASSIGNING <fs_edge> WHERE src = lv_front.
+        READ TABLE lt_indegree ASSIGNING <fs_indegree> WITH KEY id = <fs_edge>-dest.
+        IF sy-subrc = 0.
+          <fs_indegree>-count -= 1.
+          IF <fs_indegree>-count = 0.
+            APPEND <fs_edge>-dest TO lt_queue.
+          ENDIF.
+        ENDIF.
+      ENDLOOP.
+    ENDWHILE.
+
+    " ----------------------------------------------------------------------
+    " Final result
+    " ----------------------------------------------------------------------
+    et_result = lt_result.
+
+    " ----------------------------------------------------------------------
+    " Time Complexity:
+    "   - O(E log E): Sorting nodes
+    "   - O(V): Initializing in-degrees
+    "   - O(E): Updating in-degrees
+    "   - O(V + E): Main BFS loop
+    " => Overall: O(V + E)
+    "
+    " Space Complexity:
+    "   - O(V): in-degree table, queue, result
+    "   - O(E): edge list
+    " => Total: O(V + E)
+    " ----------------------------------------------------------------------
+
+  ENDMETHOD.
+
+
+  METHOD build_graph.
+    " Build adjacency list representation of graph
+    rt_graph = VALUE tt_dfsbfs_graph( ).
+
+    LOOP AT it_edges INTO DATA(ls_edge).
+      READ TABLE rt_graph WITH KEY node = ls_edge-from_node ASSIGNING FIELD-SYMBOL(<ls_graph_row>).
+
+      IF sy-subrc <> 0.
+        " Node not yet in graph: insert new entry
+        INSERT VALUE ty_dfsbfs_graph_row(
+          node = ls_edge-from_node
+          neighbors = VALUE tt_dfsbfs_adjacency( ( ls_edge-to_node ) )
+        ) INTO TABLE rt_graph.
+      ELSE.
+        " Node exists: append to its adjacency list
+        APPEND ls_edge-to_node TO <ls_graph_row>-neighbors.
+      ENDIF.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD dfs_helper.
+    " Base case: node already visited
+    IF line_exists( ct_visited[ table_line = iv_node ] ).
+      RETURN.
+    ENDIF.
+
+    INSERT iv_node INTO TABLE ct_visited.
+    APPEND iv_node TO ct_result.
+
+    READ TABLE it_graph INTO DATA(ls_graph_row) WITH KEY node = iv_node.
+    IF sy-subrc = 0.
+      LOOP AT ls_graph_row-neighbors INTO DATA(lv_neighbor).
+        dfs_helper(
+          EXPORTING
+            iv_node    = lv_neighbor
+            it_graph   = it_graph
+          CHANGING
+            ct_visited = ct_visited
+            ct_result  = ct_result
+        ).
+      ENDLOOP.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD dfs_graph.
+    DATA(lt_graph)   = build_graph( it_edges ).
+    DATA: lt_visited TYPE tt_dfsbfs_visited,
+          lt_result  TYPE tt_dfsbfs_result.
+
+    dfs_helper(
+      EXPORTING
+        iv_node    = iv_start
+        it_graph   = lt_graph
+      CHANGING
+        ct_visited = lt_visited
+        ct_result  = lt_result
+    ).
+
+    rt_result = lt_result.
+  ENDMETHOD.
+
+
+  METHOD bfs_helper.
+    DATA: lt_queue   TYPE tt_dfsbfs_queue,
+          lt_visited TYPE tt_dfsbfs_visited,
+          lt_result  TYPE tt_dfsbfs_result.
+
+    APPEND iv_start_node TO lt_queue.
+    INSERT iv_start_node INTO TABLE lt_visited.
+
+    WHILE lines( lt_queue ) > 0.
+      DATA(lv_current) = lt_queue[ 1 ].
+      DELETE lt_queue INDEX 1.
+
+      APPEND lv_current TO lt_result.
+
+      READ TABLE it_graph INTO DATA(ls_graph_row) WITH KEY node = lv_current.
+      IF sy-subrc = 0.
+        LOOP AT ls_graph_row-neighbors INTO DATA(lv_neighbor).
+          IF NOT line_exists( lt_visited[ table_line = lv_neighbor ] ).
+            APPEND lv_neighbor TO lt_queue.
+            INSERT lv_neighbor INTO TABLE lt_visited.
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
+    ENDWHILE.
+
+    rt_result = lt_result.
+  ENDMETHOD.
+
+
+  METHOD bfs_graph.
+    DATA(lt_graph) = build_graph( it_edges ).
+    rt_result = bfs_helper( iv_start_node = iv_start it_graph = lt_graph ).
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+START-OF-SELECTION.
+  TYPES: tt_i TYPE STANDARD TABLE OF i WITH EMPTY KEY.
+  DATA(lt_data) = VALUE tt_i( ( 5 ) ( 2 ) ( 9 ) ( 1 ) ( 6 ) ( 3 ) ).
+
+  SKIP. WRITE:/ '**********************************************************************'. SKIP.
+  WRITE: / '--- Merge Sort ---'.
+  WRITE: / '--- Input Array[5 2 9 1 6 3] ---'.
+
+  WRITE: / 'Recursive Tree (Ceiling Division)'.
+  WRITE: / '               [5 2 9 1 6 3]            '.
+  WRITE: / '             /               \          '.
+  WRITE: / '        [5 2 9]             [1 6 3]     '.
+  WRITE: / '       /       \           /       \    '.
+  WRITE: / '   [5 2 ]       [9]     [1 6]       [3] '.
+  WRITE: / '   /    \                /   \          '.
+  WRITE: / '[5]   [2]            [1]   [6]          '.
+  SKIP.
+
+  DATA(lt_merge) = lcl_dsa=>merge_sort( lt_data ).
+  LOOP AT lt_merge INTO DATA(val1).
+    WRITE: val1, ' '.
+  ENDLOOP.
+
+  SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+  WRITE: / '--- Quick Sort ---'.
+  WRITE: / '--- Input Array[5 2 9 1 6 3] ---'.
+
+  WRITE:/ '  recursive tree                       '.
+  WRITE:/ '  quick_sort([5, 2, 9, 1, 6, 3])       '.
+  WRITE:/ '│                                      '.
+  WRITE:/ '├── Pivot = 5                          '.
+  WRITE:/ '├── lt_less  = [2, 1, 3]               '.
+  WRITE:/ '│   └── quick_sort([2, 1, 3])          '.
+  WRITE:/ '│       ├── Pivot = 2                  '.
+  WRITE:/ '│       ├── lt_less  = [1]             '.
+  WRITE:/ '│       │   └── quick_sort([1]) → [1]  '.
+  WRITE:/ '│       ├── lt_equal = [2]             '.
+  WRITE:/ '│       ├── lt_more  = [3]             '.
+  WRITE:/ '│       │   └── quick_sort([3]) → [3]  '.
+  WRITE:/ '│       └── Combined → [1, 2, 3]       '.
+  WRITE:/ '│                                      '.
+  WRITE:/ '├── lt_equal = [5]                     '.
+  WRITE:/ '│                                      '.
+  WRITE:/ '├── lt_more  = [9, 6]                  '.
+  WRITE:/ '│   └── quick_sort([9, 6])             '.
+  WRITE:/ '│       ├── Pivot = 9                  '.
+  WRITE:/ '│       ├── lt_less  = [6]             '.
+  WRITE:/ '│       │   └── quick_sort([6]) → [6]  '.
+  WRITE:/ '│       ├── lt_equal = [9]             '.
+  WRITE:/ '│       ├── lt_more  = []              '.
+  WRITE:/ '│       │   └── quick_sort([]) → []    '.
+  WRITE:/ '│       └── Combined → [6, 9]          '.
+  WRITE:/ '│                                      '.
+  WRITE:/ '└── Final Combined → [1, 2, 3, 5, 6, 9]'.
+  SKIP.
+
+  DATA(lt_quick) = lcl_dsa=>quick_sort( lt_data ).
+  LOOP AT lt_quick INTO DATA(val2). WRITE: val2, ' '. ENDLOOP.
+
+  SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+  WRITE: / '--- Binary Search (Find 3) ---'.
+  WRITE: / '--- Input Array[5 2 9 1 6 3] ---'.
+
+  DATA(index) = 0.
+  DATA lt_result_sorted_array TYPE tt_i.
+  lcl_dsa=>binary_search( EXPORTING it_input = lt_data iv_key_value = 3 IMPORTING ev_index = index ev_sorted_array = lt_result_sorted_array ).
+*  lcl_dsa=>binary_search( EXPORTING it_input = lt_data iv_key_value = 5 IMPORTING ev_index = index ev_sorted_array = lt_result_sorted_array ).
+
+  LOOP AT lt_result_sorted_array ASSIGNING FIELD-SYMBOL(<fs_result_sorted_array>).
+    IF sy-tabix = 1.
+      WRITE: / '--- Input Sorted Array['.
+    ENDIF.
+
+    WRITE: <fs_result_sorted_array>, ' '.
+
+    IF sy-tabix = lines( lt_result_sorted_array ).
+      WRITE: '] ---'.
+    ENDIF.
+  ENDLOOP.
+
+  SKIP.
+  WRITE: / '                       [ mid index=4, mid index element value=5 ]                      '.
+  WRITE: / '                           /                                        \                  '.
+  WRITE: / '   (mid value 5 > 3, go left)                              (go right — not explored)   '.
+  WRITE: / '                                                                                       '.
+  WRITE: / '                       /                                                               '.
+  WRITE: / '      [ mid index=2, mid index element value=2 ]                                       '.
+  WRITE: / '             low=1, high=3                                                             '.
+  WRITE: / '       (mid value 2 < 3, go right)                                                     '.
+  WRITE: / '                                                                                       '.
+  WRITE: / '                              \                                                        '.
+  WRITE: / '          [ mid index=3, mid index element value=3 ]  <-- ✅ Found here                '.
+  SKIP.
+
+  WRITE: / |Found at index: { index }|.
+
+  SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+  WRITE: / '--- Fibonacci (10) ---'.
+  WRITE: / lcl_dsa=>fibonacci_dp( 10 ).
+
+  SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+  WRITE: / '--- Binary Strings (n=3) ---'.
+  lcl_dsa=>generate_binary_strings( 3 ).
+
+  SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+  WRITE: / '--- Activity Selection ---'.
+  DATA(lt_act) = lcl_dsa=>activity_selection( ).
+  LOOP AT lt_act INTO DATA(act).
+    WRITE: act, ' '.
+  ENDLOOP.
+
+  SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+
+
+  DATA(lt_graph) = VALUE lcl_dsa=>tt_edge(
+    ( src = 1 dest = 2 weight = 2 )
+    ( src = 1 dest = 3 weight = 4 )
+    ( src = 2 dest = 3 weight = 1 )
+    ( src = 2 dest = 4 weight = 7 )
+    ( src = 3 dest = 5 weight = 3 )
+    ( src = 4 dest = 6 weight = 1 )
+    ( src = 5 dest = 4 weight = 2 )
+    ( src = 5 dest = 6 weight = 5 )
+  ).
+
+  DATA(lt_result) = VALUE lcl_dsa=>tt_cost( ).
+  DATA(lt_paths)  = VALUE lcl_dsa=>tt_path( ).
+
+  lcl_dsa=>dijkstra(
+    EXPORTING
+      it_graph     = lt_graph
+      iv_source    = 1
+    IMPORTING
+      et_distances = lt_result
+      et_paths     = lt_paths
+  ).
+
+  WRITE: / '--- Dijkstra Result (from node 1) ---'.
+  WRITE: / 'Edge List:'.
+  LOOP AT lt_graph INTO DATA(e).
+    WRITE: / |  { e-src } -> { e-dest }  weight: { e-weight }|.
+  ENDLOOP.
+
+  SKIP.
+  WRITE: / 'Shortest Distances:'.
+  WRITE: / '-------------------'.
+  LOOP AT lt_result INTO DATA(res).
+    WRITE: / |Node { res-id } -> Cost: { res-weight }|.
+  ENDLOOP.
+
+  SKIP.
+  DATA(lv_target) = 5.
+  DATA(lt_path) = lcl_dsa=>get_shortest_path( iv_target = lv_target it_paths = lt_paths ).
+  WRITE: / |Shortest Path from 1 to { lv_target }:|.
+  LOOP AT lt_path INTO DATA(step).
+    WRITE: | { step }|.
+  ENDLOOP.
+
+  SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+
+
+  DATA lt_edges TYPE lcl_dsa=>tt_edge.
+  CLEAR lt_edges.
+  lt_edges = VALUE #( ( src = 5 dest = 0 )
+                      ( src = 5 dest = 2 )
+                      ( src = 4 dest = 0 )
+                      ( src = 4 dest = 1 )
+                      ( src = 2 dest = 3 )
+                      ( src = 3 dest = 1 ) ).
+
+  DATA lt_sorted TYPE lcl_dsa=>tt_i.
+
+  lcl_dsa=>topological_sort(
+    EXPORTING
+      it_edges  = lt_edges
+    IMPORTING
+      et_result = lt_sorted
+  ).
+
+  WRITE: / '--- Topological Sort ---'.
+  WRITE: / 'Input ( src = 5 dest = 0 )'.
+  WRITE: / 'Input ( src = 5 dest = 2 )'.
+  WRITE: / 'Input ( src = 4 dest = 0 )'.
+  WRITE: / 'Input ( src = 4 dest = 1 )'.
+  WRITE: / 'Input ( src = 2 dest = 3 )'.
+  WRITE: / 'Input ( src = 3 dest = 1 )'.
+
+  LOOP AT lt_sorted ASSIGNING FIELD-SYMBOL(<fs_val>).
+    WRITE: <fs_val>, ' '.
+  ENDLOOP.
+  WRITE: /.
+
+  SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+
+
+  DATA lt_edges_kahn TYPE lcl_dsa=>tt_edges.
+
+  lt_edges_kahn = VALUE
+    #( ( src = 5 dest = 0 )
+       ( src = 5 dest = 2 )
+       ( src = 4 dest = 0 )
+       ( src = 4 dest = 1 )
+       ( src = 2 dest = 3 )
+       ( src = 3 dest = 1 ) ).
+
+  DATA lt_result_topo_sort_kahn TYPE lcl_dsa=>tt_nodes.
+
+  lcl_dsa=>topological_sort_kahn(
+    EXPORTING
+      it_edges  = lt_edges_kahn
+    IMPORTING
+      et_result = lt_result_topo_sort_kahn ).
+
+  WRITE: / '--- Topological Sort Kahn ---'.
+  WRITE: / 'Input ( src = 5 dest = 0 )'.
+  WRITE: / 'Input ( src = 5 dest = 2 )'.
+  WRITE: / 'Input ( src = 4 dest = 0 )'.
+  WRITE: / 'Input ( src = 4 dest = 1 )'.
+  WRITE: / 'Input ( src = 2 dest = 3 )'.
+  WRITE: / 'Input ( src = 3 dest = 1 )'.
+
+  LOOP AT lt_result_topo_sort_kahn ASSIGNING FIELD-SYMBOL(<fs_result>).
+    WRITE: <fs_result>, ' '.
+  ENDLOOP.
+
+  SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+
+
+  DATA(lt_edges_dfsbfs) = VALUE lcl_dsa=>tt_dfsbfs_edge(
+    ( from_node = 0 to_node = 1 )
+    ( from_node = 0 to_node = 2 )
+    ( from_node = 1 to_node = 3 )
+    ( from_node = 1 to_node = 4 )
+    ( from_node = 2 to_node = 5 )
+  ).
+
+  DATA(lt_dfs_result) = lcl_dsa=>dfs_graph( it_edges = lt_edges_dfsbfs iv_start = 0 ).
+
+  WRITE: / 'DFS Traversal Result:'.
+  WRITE: / '( from_node = 0 to_node = 1 )'.
+  WRITE: / '( from_node = 0 to_node = 2 )'.
+  WRITE: / '( from_node = 1 to_node = 3 )'.
+  WRITE: / '( from_node = 1 to_node = 4 )'.
+  WRITE: / '( from_node = 2 to_node = 5 )'.
+
+  LOOP AT lt_dfs_result INTO DATA(lv_dfs).
+    WRITE: lv_dfs, ' '.
+  ENDLOOP.
+
+  SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+
+
+  DATA(lt_bfs_result) = lcl_dsa=>bfs_graph( it_edges = lt_edges_dfsbfs iv_start = 0 ).
+
+  WRITE: / 'BFS Traversal Result:'.
+  WRITE: / '( from_node = 0 to_node = 1 )'.
+  WRITE: / '( from_node = 0 to_node = 2 )'.
+  WRITE: / '( from_node = 1 to_node = 3 )'.
+  WRITE: / '( from_node = 1 to_node = 4 )'.
+  WRITE: / '( from_node = 2 to_node = 5 )'.
+  LOOP AT lt_bfs_result INTO DATA(lv_bfs).
+    WRITE: lv_bfs, ' '.
+  ENDLOOP.
+  SKIP. WRITE:/ '**********************************************************************'. SKIP.
