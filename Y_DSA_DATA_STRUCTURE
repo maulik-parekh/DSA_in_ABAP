@@ -1,0 +1,297 @@
+*&---------------------------------------------------------------------*
+*& Report Y_DSA_DATA_STRUCTURE
+*&---------------------------------------------------------------------*
+REPORT Y_DSA_DATA_STRUCTURE.
+
+**********************************************************************
+*  ABAP 7.5+ DATA STRUCTURE DEMOS
+**********************************************************************
+
+" 0. Hello World
+DATA(lv_str) = |Hello, ABAP 7.5+|.
+WRITE: / lv_str.
+
+SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+**********************************************************************
+* 1. Arrays & Strings
+**********************************************************************
+WRITE:/ '1. Arrays & Strings'.
+
+TYPES: tt_int TYPE STANDARD TABLE OF i WITH EMPTY KEY.
+
+DATA(lt_arr) = VALUE tt_int( ( 10 ) ( 20 ) ( 30 ) ).
+
+LOOP AT lt_arr ASSIGNING FIELD-SYMBOL(<fs_arr>).
+  WRITE: / <fs_arr>.
+ENDLOOP.
+
+SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+**********************************************************************
+* 2. Linked List (Singly Linked)
+**********************************************************************
+WRITE:/ '2. Linked List (Singly Linked)'.
+
+CLASS lcl_node DEFINITION.
+  PUBLIC SECTION.
+    DATA: value TYPE int8,
+          next  TYPE REF TO lcl_node.
+ENDCLASS.
+
+CLASS lcl_node IMPLEMENTATION.
+ENDCLASS.
+
+DATA(lr_node1) = NEW lcl_node( ).
+DATA(lr_node2) = NEW lcl_node( ).
+DATA(lr_node3) = NEW lcl_node( ).
+
+lr_node1->value = 1.
+lr_node2->value = 2.
+lr_node3->value = 3.
+
+lr_node1->next = lr_node2.
+lr_node2->next = lr_node3.
+
+DATA(lr_curr_node) = lr_node1.
+WHILE lr_curr_node IS BOUND.
+  WRITE: / lr_curr_node->value.
+  lr_curr_node = lr_curr_node->next.
+ENDWHILE.
+
+SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+**********************************************************************
+* 3. Stack (LIFO)
+**********************************************************************
+WRITE:/ '3. Stack (LIFO)'.
+
+TYPES: tt_stack TYPE STANDARD TABLE OF i WITH EMPTY KEY.
+DATA lt_stack TYPE tt_stack.
+
+APPEND 10 TO lt_stack.
+APPEND 20 TO lt_stack.
+APPEND 30 TO lt_stack.
+
+WHILE lines( lt_stack ) > 0.
+  WRITE: / lt_stack[ lines( lt_stack ) ].
+  DELETE lt_stack INDEX lines( lt_stack ).
+ENDWHILE.
+
+SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+**********************************************************************
+* 4. Queue (FIFO)
+**********************************************************************
+WRITE:/ '4. Queue (FIFO)'.
+
+TYPES: tt_queue TYPE STANDARD TABLE OF i WITH EMPTY KEY.
+DATA lt_queue TYPE tt_queue.
+
+APPEND 100 TO lt_queue.
+APPEND 200 TO lt_queue.
+
+WHILE lt_queue IS NOT INITIAL.
+  WRITE: / lt_queue[ 1 ].
+  DELETE lt_queue INDEX 1.
+ENDWHILE.
+
+SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+**********************************************************************
+* 5. Binary Tree with In-order Traversal
+**********************************************************************
+WRITE:/ '5. Binary Tree (Structure + In-order Traversal)'.
+
+*       10
+*      /  \
+*     8    12
+*    /       \
+*   5         15
+
+CLASS lcl_btree_node DEFINITION.
+  PUBLIC SECTION.
+    DATA value TYPE i.
+    DATA lr_left   TYPE REF TO lcl_btree_node.
+    DATA lr_right  TYPE REF TO lcl_btree_node.
+
+    METHODS:
+      constructor  IMPORTING iv_value TYPE i,
+      insert_value IMPORTING iv_value TYPE i,
+      traverse.
+ENDCLASS.
+
+CLASS lcl_btree_node IMPLEMENTATION.
+
+  METHOD constructor.
+    value = iv_value.
+  ENDMETHOD.
+
+  METHOD insert_value.
+
+*	       10
+*	    /      \
+*    5        15
+*   / \      / \
+*	     8   12
+
+    IF iv_value < value.
+      IF lr_left IS NOT BOUND.
+        lr_left = NEW lcl_btree_node( iv_value ).
+      ELSE.
+        lr_left->insert_value( iv_value ).
+      ENDIF.
+    ELSE.
+      IF lr_right IS NOT BOUND.
+        lr_right = NEW lcl_btree_node( iv_value ).
+      ELSE.
+        lr_right->insert_value( iv_value ).
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD traverse.
+    IF lr_left IS BOUND.
+      lr_left->traverse( ).
+    ENDIF.
+
+    WRITE: / value.
+
+    IF lr_right IS BOUND.
+      lr_right->traverse( ).
+    ENDIF.
+  ENDMETHOD.
+
+ENDCLASS.
+
+START-OF-SELECTION.
+  DATA(lr_root) = NEW lcl_btree_node( 10 ).
+  lr_root->insert_value( 5 ).
+  lr_root->insert_value( 15 ).
+  lr_root->insert_value( 8 ).
+  lr_root->insert_value( 12 ).
+
+*& Traverse - Binary Sort Tree (BST)
+  lr_root->traverse( ).
+
+  SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+**********************************************************************
+* 6. Graph (Adjacency List) with BFS
+**********************************************************************
+  WRITE:/ '6. Graph (Adjacency List with BFS)'.
+
+  TYPES: BEGIN OF ty_edge,
+           from TYPE i,
+           to   TYPE i,
+         END OF ty_edge.
+
+  TYPES: tt_graph TYPE STANDARD TABLE OF ty_edge WITH EMPTY KEY.
+  TYPES: tt_int_list TYPE STANDARD TABLE OF i WITH EMPTY KEY.
+
+* 1 -> 2 -> 4
+* |
+* v
+* 3 -> 5
+
+  DATA(lt_graph) = VALUE tt_graph(
+    ( from = 1 to = 2 )
+    ( from = 1 to = 3 )
+    ( from = 2 to = 4 )
+    ( from = 3 to = 5 )
+  ).
+
+  DATA lt_queue_bfs TYPE tt_int_list.
+  DATA lt_visited_bfs TYPE tt_int_list.
+
+  APPEND 1 TO lt_queue_bfs.
+
+  WHILE lt_queue_bfs IS NOT INITIAL.
+    DATA(lv_curr_node_bfs) = lt_queue_bfs[ 1 ].
+    DELETE lt_queue_bfs INDEX 1.
+
+*& validate if already visited in graph
+    IF line_exists( lt_visited_bfs[ table_line = lv_curr_node_bfs ] ).
+      CONTINUE.
+    ENDIF.
+
+    APPEND lv_curr_node_bfs TO lt_visited_bfs.
+    WRITE: / |Visited { lv_curr_node_bfs }|.
+
+    LOOP AT lt_graph INTO DATA(ls_edge) WHERE from = lv_curr_node_bfs.
+      APPEND ls_edge-to TO lt_queue_bfs.
+    ENDLOOP.
+  ENDWHILE.
+
+  SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+**********************************************************************
+* 7. Heap / Priority Queue using Sorted Table
+**********************************************************************
+  WRITE:/ '7. Heap / Priority Queue (Sorted Table)'.
+
+  TYPES: BEGIN OF ty_task,
+           task     TYPE string,
+           priority TYPE i,
+         END OF ty_task.
+
+  TYPES: tt_heap TYPE SORTED TABLE OF ty_task WITH UNIQUE KEY priority.
+
+  DATA(lt_heap) = VALUE tt_heap(
+    ( task = 'Fix Bug'   priority = 2 )
+    ( task = 'Deploy'    priority = 1 )
+    ( task = 'Write Doc' priority = 3 )
+  ).
+
+  LOOP AT lt_heap INTO DATA(ls_task).
+    WRITE: / |Priority { ls_task-priority }: { ls_task-task }|.
+  ENDLOOP.
+
+  SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+**********************************************************************
+* 8.1 Hash Map
+**********************************************************************
+  WRITE:/ '8.1. Hash Map'.
+
+  TYPES: BEGIN OF ty_skill_level,
+           key   TYPE string,
+           value TYPE string,
+         END OF ty_skill_level.
+
+  TYPES: tt_hashmap TYPE HASHED TABLE OF ty_skill_level WITH UNIQUE KEY key.
+
+  DATA(lt_map) = VALUE tt_hashmap(
+    ( key = 'ABAP'   value = 'Advanced' )
+    ( key = 'Python' value = 'Beginner' )
+  ).
+
+  WRITE: / lt_map[ key = 'ABAP' ]-value.
+
+  SKIP. WRITE:/ '**********************************************************************'. SKIP.
+
+**********************************************************************
+* 8.2 Hash Set
+**********************************************************************
+  WRITE:/ '8.2. Hash Set'.
+
+*SAP ABAP does not have a built-in HashSet data structure like you find in Java or Python.
+
+*  TYPES: BEGIN OF ty_string_key,
+*           value TYPE string,
+*         END OF ty_string_key.
+*
+*  TYPES ty_hashset TYPE HASHED TABLE OF ty_string_key WITH UNIQUE KEY value.
+*
+*  DATA(lt_hashset) = VALUE ty_hashset(
+*    ( value = 'ABAP' )
+*    ( value = 'Python' )
+*    " duplicate 'ABAP' would cause runtime error if inserted twice, so omitted here
+*  ).
+*
+*  LOOP AT lt_hashset ASSIGNING FIELD-SYMBOL(<fs_hashset>).
+*    WRITE: / <fs_hashset>-value.
+*  ENDLOOP.
+
+  SKIP. WRITE:/ '**********************************************************************'. SKIP.
